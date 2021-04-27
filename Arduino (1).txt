@@ -1,0 +1,96 @@
+#include <SoftwareSerial.h>
+
+SoftwareSerial BT(10, 11); // RX | TX
+
+#define analogPin      0
+#define chargePin      13
+#define dischargePin   8
+#define gnd   A2
+#define resistorValue  10000.0F
+int rmp_in = 7;
+
+//VARIABLES PARA CAPACITOR
+unsigned long startTime;
+unsigned long elapsedTime;
+float microFarads;
+float nanoFarads;
+String smF;
+
+//VARIABLES PARA RPM
+unsigned long tiempo;
+unsigned long tiempo_es = 0;
+
+int vueltas = 0;
+int estadoRele = 0;         
+int ultimoEstadoRele = 0;   
+long tiempo_anterior = 0;
+long tiempo_una_rev = 0;
+unsigned long tiempo_ahora;
+long rpm;
+
+void setup() {
+  Serial.begin(9600);
+  BT.begin(9600);
+  
+  pinMode(rmp_in, INPUT);
+  
+  pinMode(chargePin, OUTPUT);
+  digitalWrite(chargePin, LOW);
+  pinMode(gnd, OUTPUT);
+  digitalWrite(gnd, LOW);
+}
+
+void capacitancia() {
+  unsigned long time_r = millis();
+  
+  if( (time_r - tiempo_es) >= 5000 ) {
+    
+    digitalWrite(chargePin, HIGH);
+    startTime = micros();
+    while (analogRead(analogPin) < 648) {}
+  
+    elapsedTime = micros() - startTime;
+    microFarads = ((float)elapsedTime / resistorValue);
+  
+    //Serial.println(smF);
+    BT.write('1');
+    BT.print(microFarads);
+
+    Serial.write("CAP");
+    Serial.println(String(microFarads));
+    Serial.write("uF");
+    delay(500);
+    
+    digitalWrite(chargePin, LOW);
+    pinMode(dischargePin, OUTPUT);
+    digitalWrite(dischargePin, LOW);
+    while (analogRead(analogPin) > 0) {}
+  
+    pinMode(dischargePin, INPUT);
+
+    tiempo_es = millis();
+  }  
+}
+
+void loop() {
+  capacitancia();  
+
+  estadoRele = digitalRead(rmp_in);
+
+  if (estadoRele != ultimoEstadoRele) {
+    if (estadoRele == HIGH) {
+      vueltas++;
+      tiempo_ahora = millis();
+      tiempo_una_rev = tiempo_ahora - tiempo_anterior;
+      rpm = 60000 / tiempo_una_rev;
+      
+      BT.write('0');
+      BT.println(rpm);
+    } else {
+      tiempo_anterior = tiempo_ahora;    
+    }
+  }
+  ultimoEstadoRele = estadoRele;  
+
+  Serial.println(rpm);
+}
